@@ -23,13 +23,11 @@ class Trainer():
             # Fake examples, so D should output 0
             target = np.zeros(self.model.batch_size).astype(int)
             d_loss = self.model.discriminator.train_on_batch(fake_batch, target)
-            print("Fake {}".format(self.model.discriminator.predict(fake_batch, batch_size=self.model.batch_size)[0:5]))
         # Or train discriminator on real data
         else:
             # Real data, so D should output 1
             target = np.ones(self.model.batch_size).astype(int)
             d_loss = self.model.discriminator.train_on_batch(x_batch, target)
-            print("Real {}".format(self.model.discriminator.predict(x_batch, batch_size=self.model.batch_size)[0:5]))
         self.d_loss_history.append(d_loss)
 
     def fit(self, x_train, num_epochs=1, print_every=0):
