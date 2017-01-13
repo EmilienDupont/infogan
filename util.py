@@ -7,6 +7,8 @@ import time
 from keras.datasets import mnist
 from plotly import tools
 
+EPSILON = 1e-8
+
 def disc_mutual_info_loss(c_disc, aux_dist):
     """
     Mutual Information lower bound loss for discrete distribution.

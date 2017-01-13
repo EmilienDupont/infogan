@@ -12,9 +12,7 @@ from keras.optimizers import Adam, SGD
 from keras import backend as K
 from keras import objectives
 from util import (disc_mutual_info_loss, sample_unit_gaussian,
-                  sample_categorical, plot_digit_grid)
-
-EPSILON = 1e-8
+                  sample_categorical, plot_digit_grid, EPSILON)
 
 class InfoGAN():
     """
