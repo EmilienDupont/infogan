@@ -5,8 +5,9 @@ import plotly.offline as py
 import time
 
 from keras.layers import Input, Dense, Lambda, Flatten, Reshape, merge
-from keras.layers import Convolution2D, Deconvolution2D, BatchNormalization
+from keras.layers import Convolution2D, Conv2DTranspose, BatchNormalization
 from keras.layers.advanced_activations import LeakyReLU
+from keras.layers.merge import Concatenate
 from keras.models import Model
 from keras.optimizers import Adam, SGD
 from keras import backend as K
@@ -73,22 +74,18 @@ class InfoGAN():
         """
         self.z_input = Input(batch_shape=(self.batch_size, self.latent_dim), name='z_input')
         self.c_disc_input = Input(batch_shape=(self.batch_size, self.reg_disc_dim), name='c_input')
-        x = merge([self.z_input, self.c_disc_input], mode='concat')
+        x = Concatenate()([self.z_input, self.c_disc_input])
         x = Dense(1024, activation='relu')(x)
-        x = BatchNormalization(mode=2)(x)
+        x = BatchNormalization()(x)
         x = Dense(7 * 7 * 128, activation='relu')(x)
-        x = BatchNormalization(mode=2)(x)
+        x = BatchNormalization()(x)
         x = Reshape((7, 7, 128))(x)
-        x = Deconvolution2D(64, 4, 4, output_shape=(self.batch_size, 14, 14, 64),
-                            subsample=(2,2), border_mode='same',
-                            activation='relu')(x)
-        x = BatchNormalization(mode=2)(x)
-        self.g_output = Deconvolution2D(1, 4, 4,
-                            output_shape=(self.batch_size,) + self.input_shape,
-                            subsample=(2,2), border_mode='same',
-                            activation='sigmoid', name='generated')(x)
+        x = Conv2DTranspose(64, (4, 4), strides=(2,2), padding='same', activation='relu')(x)
+        x = BatchNormalization()(x)
+        self.g_output = Conv2DTranspose(1, (4, 4), strides=(2,2), padding='same',
+                                        activation='sigmoid', name='generated')(x)
 
-        self.generator = Model(input=[self.z_input, self.c_disc_input], output=self.g_output, name='gen_model')
+        self.generator = Model(inputs=[self.z_input, self.c_disc_input], outputs=[self.g_output], name='gen_model')
         self.opt_generator = Adam(lr=1e-3)
         self.generator.compile(loss='binary_crossentropy',
                                optimizer=self.opt_generator)
@@ -98,17 +95,18 @@ class InfoGAN():
         Set up discriminator D
         """
         self.d_input = Input(batch_shape=(self.batch_size,) + self.input_shape, name='d_input')
-        x = Convolution2D(64, 4, 4, subsample=(2,2),
-                          activation=LeakyReLU(0.1))(self.d_input)
-        x = Convolution2D(128, 4, 4, subsample=(2,2),
-                          activation=LeakyReLU(0.1))(x)
-        x = BatchNormalization(mode=2)(x)
+        x = Convolution2D(64, (4, 4), strides=(2,2))(self.d_input)
+        x = LeakyReLU(0.1)(x)
+        x = Convolution2D(128, (4, 4), strides=(2,2))(x)
+        x = LeakyReLU(0.1)(x)
+        x = BatchNormalization()(x)
         x = Flatten()(x)
-        x = Dense(1024, activation=LeakyReLU(0.1))(x)
-        self.d_hidden = BatchNormalization(mode=2)(x) # Store this to set up Q
+        x = Dense(1024)(x)
+        x = LeakyReLU(0.1)(x)
+        self.d_hidden = BatchNormalization()(x) # Store this to set up Q
         self.d_output = Dense(1, activation='sigmoid', name='d_output')(self.d_hidden)
 
-        self.discriminator = Model(input=self.d_input, output=self.d_output, name='dis_model')
+        self.discriminator = Model(inputs=[self.d_input], outputs=[self.d_output], name='dis_model')
         self.opt_discriminator = Adam(lr=2e-4)
         self.discriminator.compile(loss='binary_crossentropy',
                                    optimizer=self.opt_discriminator)
@@ -121,7 +119,7 @@ class InfoGAN():
         x = BatchNormalization()(x)
         x = LeakyReLU(0.1)(x)
         self.q_output = Dense(self.reg_disc_dim, activation='softmax', name='auxiliary')(x)
-        self.auxiliary = Model(input=self.d_input, output=self.q_output, name='aux_model')
+        self.auxiliary = Model(inputs=[self.d_input], outputs=[self.q_output], name='aux_model')
         # It does not matter what the loss is here, as we do not specifically train this model
         self.auxiliary.compile(loss='mse', optimizer=self.opt_discriminator)
 
@@ -133,7 +131,7 @@ class InfoGAN():
         self.discriminator.trainable = False
         gan_output = self.discriminator(self.g_output)
         gan_output_aux = self.auxiliary(self.g_output)
-        self.gan = Model(input=[self.z_input, self.c_disc_input], output=[gan_output, gan_output_aux])
+        self.gan = Model(inputs=[self.z_input, self.c_disc_input], outputs=[gan_output, gan_output_aux])
         self.gan.compile(loss={'dis_model' : 'binary_crossentropy',
                                'aux_model' : disc_mutual_info_loss},
                          loss_weights={'dis_model' : 1.,
